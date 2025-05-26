@@ -10,12 +10,24 @@ export interface StockPrice {
 export interface StockMarket {
   status: string;
   timezone: string;
+  // Additional properties based on actual API response
+  trading?: string;
+  extracted_price?: number;
+  price?: string;
+  price_movement?: {
+    value: number;
+    percentage: number;
+    movement: string; // "Up" or "Down"
+  };
 }
 
 export interface StockSummary {
   currency: string;
   price: StockPrice;
   market: StockMarket;
+  // Additional properties based on actual API response
+  extracted_price?: number;
+  title?: string;
 }
 
 export interface GraphPoint {
@@ -64,4 +76,23 @@ export interface SerpApiResponse {
 export interface ApiError {
   message: string;
   status?: number;
+}
+
+// Chart data type for better type safety
+export interface ChartDataPoint {
+  time: string;
+  price: number;
+  timestamp: number;
+}
+
+// Tooltip props type for recharts
+export interface TooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    value: number;
+    dataKey: string;
+    color: string;
+    payload: ChartDataPoint;
+  }>;
+  label?: string;
 }

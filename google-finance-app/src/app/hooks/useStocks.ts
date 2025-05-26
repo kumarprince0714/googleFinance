@@ -1,4 +1,4 @@
-// src/app/hooks/useStocks.ts
+//File path: src/app/hooks/useStocks.ts
 
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";

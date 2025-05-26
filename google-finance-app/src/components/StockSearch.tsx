@@ -1,5 +1,3 @@
-//File location: src > components > StockSearch.tsx
-
 "use client";
 
 import { useState } from "react";
@@ -14,16 +12,35 @@ export default function StockSearch({
   placeholder = "Enter stock symbol (e.g., GOOGL:NASDAQ)",
 }: StockSearchProps) {
   const [inputValue, setInputValue] = useState("");
+  const [error, setError] = useState("");
+
+  const validateSymbol = (symbol: string): boolean => {
+    // Basic validation for symbol format
+    const symbolPattern = /^[A-Z]+:[A-Z]+$/i;
+    return symbolPattern.test(symbol.trim());
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputValue.trim()) {
-      onSymbolChange(inputValue.trim());
+    const trimmedValue = inputValue.trim().toUpperCase();
+
+    if (!trimmedValue) {
+      setError("Please enter a stock symbol");
+      return;
     }
+
+    if (!validateSymbol(trimmedValue)) {
+      setError("Please use format: SYMBOL:EXCHANGE (e.g., GOOGL:NASDAQ)");
+      return;
+    }
+
+    setError("");
+    onSymbolChange(trimmedValue);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
+    if (error) setError(""); // Clear error when user starts typing
   };
 
   return (
@@ -34,7 +51,9 @@ export default function StockSearch({
           value={inputValue}
           onChange={handleInputChange}
           placeholder={placeholder}
-          className="w-full px-4 py-3 pr-12 text-lg border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+          className={`w-full px-4 py-3 pr-12 text-lg border rounded-lg focus:ring-blue-500 focus:border-transparent outline-none transition-all ${
+            error ? "border-red-500" : "border-gray-300"
+          }`}
         />
         <button
           type="submit"
@@ -43,8 +62,16 @@ export default function StockSearch({
           Search
         </button>
       </div>
+
+      {error && (
+        <div className="mt-2 text-sm text-red-600">
+          <p>{error}</p>
+        </div>
+      )}
+
       <div className="mt-2 text-sm text-gray-600">
-        <p>Examples: GOOGL:NASDAQ, AAPL:NASDAQ, TSLA:NASDAQ</p>
+        <p>Examples: GOOGL:NASDAQ, AAPL:NASDAQ, TSLA:NASDAQ, MSFT:NASDAQ</p>
+        <p>Format: SYMBOL:EXCHANGE</p>
       </div>
     </form>
   );
