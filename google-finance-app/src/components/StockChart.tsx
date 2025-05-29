@@ -1,6 +1,8 @@
+// src/components/StockChart.tsx
+
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useStockData } from "@/app/hooks/useStocks";
 import {
   LineChart,
@@ -17,15 +19,40 @@ interface StockChartProps {
   symbol: string;
 }
 
+// Time range options
+const TIME_RANGES = [
+  { value: "1D", label: "1D" },
+  { value: "5D", label: "5D" },
+  { value: "1M", label: "1M" },
+  { value: "3M", label: "3M" },
+  { value: "6M", label: "6M" },
+  { value: "YTD", label: "YTD" },
+  { value: "1Y", label: "1Y" },
+  { value: "5Y", label: "5Y" },
+  { value: "MAX", label: "MAX" },
+];
+
 export default function StockChart({ symbol }: StockChartProps) {
+  const [selectedTimeRange, setSelectedTimeRange] = useState("1D");
+
   const {
     data: stockData,
     isLoading,
     error,
     isError,
   } = useStockData(symbol, {
-    enabled: Boolean(symbol), // Only fetch when symbol is provided
+    enabled: Boolean(symbol),
+    timeRange: selectedTimeRange,
   });
+
+  // Debug logging
+  useEffect(() => {
+    if (stockData) {
+      console.log("StockChart received data:", stockData);
+      console.log("Graph data length:", stockData.graph?.graph?.length || 0);
+      console.log("Sample graph data:", stockData.graph?.graph?.slice(0, 3));
+    }
+  }, [stockData]);
 
   // Don't render anything if no symbol is provided
   if (!symbol) {
@@ -60,7 +87,9 @@ export default function StockChart({ symbol }: StockChartProps) {
       <div className="flex items-center justify-center py-16">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading stock data...</p>
+          <p className="text-gray-600">
+            Loading stock data for {selectedTimeRange}...
+          </p>
         </div>
       </div>
     );
@@ -99,12 +128,6 @@ export default function StockChart({ symbol }: StockChartProps) {
     );
   }
 
-  // Log the actual structure for debugging
-  console.log(
-    "Actual stockData structure:",
-    JSON.stringify(stockData, null, 2)
-  );
-
   // Validate basic structure
   if (!stockData.summary) {
     return (
@@ -116,62 +139,88 @@ export default function StockChart({ symbol }: StockChartProps) {
     );
   }
 
-  // Extract data based on actual API response structure
+  // Extract data with better error handling
   const { title, stock, exchange, summary, graph } = stockData;
 
-  // Handle the actual data structure from your API with proper type checking
-  const currentPrice = summary.extracted_price ?? summary.price?.current ?? 0;
+  // Handle the actual data structure with multiple fallbacks
+  const currentPrice =
+    summary.extracted_price ||
+    summary.price?.current ||
+    parseFloat(summary.price?.toString() || "0") ||
+    0;
+
   const currency = summary.currency || "$";
   const marketStatus =
     summary.market?.trading || summary.market?.status || "Unknown";
 
-  // Calculate change information from market data
-  const changeValue = summary.market?.price_movement?.value ?? 0;
-  const changePercent = summary.market?.price_movement?.percentage ?? 0;
-  const isPositive = summary.market?.price_movement?.movement === "Up";
+  // Calculate change information with fallbacks
+  const changeValue =
+    summary.market?.price_movement?.value || summary.price?.change || 0;
+  const changePercent =
+    summary.market?.price_movement?.percentage ||
+    summary.price?.change_percent ||
+    0;
+  const isPositive =
+    summary.market?.price_movement?.movement === "Up" || changeValue >= 0;
 
-  // Previous close calculation (current - change)
-  const previousClose = currentPrice - changeValue;
+  // Previous close calculation with fallback
+  const previousClose =
+    summary.price?.previous_close ||
+    graph?.previous_close ||
+    currentPrice - changeValue;
 
   const changeColor = isPositive ? "text-green-600" : "text-red-600";
 
-  // Create chart data - if graph data is insufficient, create a simple chart
+  // Create chart data with better validation
   let chartData: ChartDataPoint[] = [];
-  if (graph && graph.graph && graph.graph.length > 0) {
-    // Use existing graph data if available and has price info
+
+  if (
+    graph &&
+    graph.graph &&
+    Array.isArray(graph.graph) &&
+    graph.graph.length > 0
+  ) {
+    console.log("Processing graph data:", graph.graph.length, "points");
+
     chartData = graph.graph
-      .filter((point) => point.price) // Only include points with price data
+      .filter(
+        (point) => point && typeof point.price === "number" && point.price > 0
+      )
       .map((point) => ({
-        time: point.date,
-        price: point.price,
+        time: point.date || new Date(point.timestamp * 1000).toLocaleString(),
+        price: Number(point.price.toFixed(2)),
         timestamp: point.timestamp,
       }));
+
+    console.log("Filtered chart data:", chartData.length, "points");
+  } else {
+    console.warn("No valid graph data found in response");
   }
 
-  // If no valid chart data, create a simple two-point chart
+  // If we still don't have chart data, create a simple fallback
   if (chartData.length === 0) {
-    const now = new Date();
-    const earlier = new Date(now.getTime() - 6 * 60 * 60 * 1000); // 6 hours ago
-
+    console.log("Creating fallback chart data");
+    const now = Date.now();
     chartData = [
       {
-        time: earlier.toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
+        time: "Start",
         price: previousClose,
-        timestamp: Math.floor(earlier.getTime() / 1000),
+        timestamp: Math.floor((now - 3600000) / 1000), // 1 hour ago
       },
       {
-        time: now.toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
+        time: "Current",
         price: currentPrice,
-        timestamp: Math.floor(now.getTime() / 1000),
+        timestamp: Math.floor(now / 1000),
       },
     ];
   }
+
+  // Calculate price range for Y-axis
+  const prices = chartData.map((point) => point.price);
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const priceRange = maxPrice - minPrice;
+  const padding = Math.max(priceRange * 0.05, currentPrice * 0.01); // At least 1% padding
 
   // Custom tooltip for the chart with proper typing
   const CustomTooltip: React.FC<TooltipProps> = ({
@@ -229,24 +278,28 @@ export default function StockChart({ symbol }: StockChartProps) {
               {currency}
               {currentPrice.toFixed(2)}
             </span>
-            <div className={`flex items-center space-x-1 ${changeColor}`}>
-              <svg
-                className={`w-4 h-4 ${isPositive ? "rotate-0" : "rotate-180"}`}
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M5.293 7.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 4.414 6.707 7.707a1 1 0 01-1.414 0z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              <span className="font-semibold">
-                {isPositive ? "+" : ""}
-                {changeValue.toFixed(2)} ({isPositive ? "+" : ""}
-                {changePercent.toFixed(2)}%)
-              </span>
-            </div>
+            {changeValue !== 0 && (
+              <div className={`flex items-center space-x-1 ${changeColor}`}>
+                <svg
+                  className={`w-4 h-4 ${
+                    isPositive ? "rotate-0" : "rotate-180"
+                  }`}
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M5.293 7.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 4.414 6.707 7.707a1 1 0 01-1.414 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <span className="font-semibold">
+                  {isPositive ? "+" : ""}
+                  {changeValue.toFixed(2)} ({isPositive ? "+" : ""}
+                  {changePercent.toFixed(2)}%)
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="mt-2 text-sm text-gray-600">
@@ -255,61 +308,83 @@ export default function StockChart({ symbol }: StockChartProps) {
               {previousClose.toFixed(2)}
             </span>
           </div>
+        </div>
+      </div>
 
-          {summary.market?.price && (
-            <div className="mt-1 text-sm text-gray-600">
-              <span>After hours: {summary.market.price}</span>
-            </div>
-          )}
+      {/* Time Range Selector */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Price Chart</h3>
+        </div>
+
+        <div className="flex flex-wrap gap-2 mb-4">
+          {TIME_RANGES.map((range) => (
+            <button
+              key={range.value}
+              onClick={() => setSelectedTimeRange(range.value)}
+              className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                selectedTimeRange === range.value
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              {range.label}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Chart Section */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Price Chart</h3>
-          <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded">
-            {graph?.timespan || "1D"}
-          </span>
+      {chartData.length > 0 ? (
+        <div className="mb-4">
+          <div className="h-96">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={chartData}
+                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis
+                  dataKey="time"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 12, fill: "#6b7280" }}
+                  interval={Math.max(Math.floor(chartData.length / 8), 1)}
+                />
+                <YAxis
+                  domain={[minPrice - padding, maxPrice + padding]}
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 12, fill: "#6b7280" }}
+                  tickFormatter={(value) => `${currency}${value.toFixed(0)}`}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Line
+                  type="monotone"
+                  dataKey="price"
+                  stroke={isPositive ? "#059669" : "#dc2626"}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{
+                    r: 4,
+                    stroke: isPositive ? "#059669" : "#dc2626",
+                    strokeWidth: 2,
+                  }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={chartData}
-              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis
-                dataKey="time"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 12, fill: "#6b7280" }}
-              />
-              <YAxis
-                domain={["dataMin - 1", "dataMax + 1"]}
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 12, fill: "#6b7280" }}
-                tickFormatter={(value) => `${currency}${value.toFixed(0)}`}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Line
-                type="monotone"
-                dataKey="price"
-                stroke={isPositive ? "#059669" : "#dc2626"}
-                strokeWidth={2}
-                dot={false}
-                activeDot={{
-                  r: 4,
-                  stroke: isPositive ? "#059669" : "#dc2626",
-                  strokeWidth: 2,
-                }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+      ) : (
+        <div className="mb-4 h-96 flex items-center justify-center bg-gray-50 rounded-lg">
+          <div className="text-center">
+            <p className="text-gray-500">No chart data available</p>
+            <p className="text-sm text-gray-400 mt-1">
+              Chart data may not be available for this symbol or time range
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Additional Info */}
       <div className="border-t border-gray-200 pt-4">
@@ -320,9 +395,7 @@ export default function StockChart({ symbol }: StockChartProps) {
           </div>
           <div>
             <span className="text-gray-600">Timespan:</span>
-            <span className="ml-2 font-semibold">
-              {graph?.timespan || "1D"}
-            </span>
+            <span className="ml-2 font-semibold">{selectedTimeRange}</span>
           </div>
           <div>
             <span className="text-gray-600">Currency:</span>
@@ -334,6 +407,31 @@ export default function StockChart({ symbol }: StockChartProps) {
           </div>
         </div>
       </div>
+
+      {/* Debug Information (remove in production) */}
+      {process.env.NODE_ENV === "development" && (
+        <div className="mt-4 p-3 bg-gray-100 rounded text-xs">
+          <details>
+            <summary className="cursor-pointer font-semibold">
+              Debug Info
+            </summary>
+            <pre className="mt-2 whitespace-pre-wrap">
+              {JSON.stringify(
+                {
+                  currentPrice,
+                  previousClose,
+                  changeValue,
+                  changePercent,
+                  chartDataLength: chartData.length,
+                  sampleChartData: chartData.slice(0, 2),
+                },
+                null,
+                2
+              )}
+            </pre>
+          </details>
+        </div>
+      )}
     </div>
   );
 }

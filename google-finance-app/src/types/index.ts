@@ -58,6 +58,7 @@ export interface SerpApiResponse {
   search_parameters: {
     q: string;
     engine: string;
+    interval?: string; // Add interval parameter
   };
   summary: StockSummary;
   graph: {
@@ -94,5 +95,23 @@ export interface TooltipProps {
     color: string;
     payload: ChartDataPoint;
   }>;
+  label?: string;
+}
+
+// Time range types
+export type TimeRange =
+  | "1D"
+  | "5D"
+  | "1M"
+  | "3M"
+  | "6M"
+  | "YTD"
+  | "1Y"
+  | "3Y"
+  | "5Y"
+  | "MAX";
+
+export interface TimeRangeOption {
+  value: TimeRange;
   label?: string;
 }

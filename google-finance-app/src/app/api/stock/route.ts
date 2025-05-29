@@ -2,14 +2,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
 import { SerpApiResponse, StockData, ApiError } from "@/types";
+import { formatDateForTimeRange } from "@/utilities/formatDateForTimeRange";
+import { generateSampleData } from "@/utilities/generateSampleData";
 
 const SERP_API_KEY = process.env.SERP_API_KEY;
 const SERP_API_URL = "https://serpapi.com/search";
+
+// Time range mapping for SerpAPI
+const TIME_RANGE_MAP = {
+  "1D": "1d",
+  "5D": "5d",
+  "1M": "1m",
+  "3M": "3m",
+  "6M": "6m",
+  YTD: "ytd",
+  "1Y": "1y",
+  "5Y": "5y",
+  MAX: "max",
+};
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const symbol = searchParams.get("symbol");
+    const timeRange = searchParams.get("timeRange") || "1D";
 
     if (!symbol) {
       return NextResponse.json(
@@ -25,15 +41,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log(`Fetching data for symbol: ${symbol}`);
+    console.log(`Fetching data for symbol: ${symbol}, timeRange: ${timeRange}`);
+
+    // Map the time range to SerpAPI format
+    const serpTimeRange =
+      TIME_RANGE_MAP[timeRange as keyof typeof TIME_RANGE_MAP] || "1d";
 
     const response = await axios.get<SerpApiResponse>(SERP_API_URL, {
       params: {
         engine: "google_finance",
         q: symbol,
         api_key: SERP_API_KEY,
+        interval: serpTimeRange,
       },
-      timeout: 10000,
+      timeout: 15000,
     });
 
     const serpData = response.data;
@@ -64,10 +85,33 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Handle missing or invalid graph data more gracefully
-    let graphData = {
-      timespan: "1D",
-      previous_close: serpData.summary?.price?.previous_close || 0,
+    // Extract current price from multiple possible locations
+    const currentPrice =
+      serpData.summary.extracted_price ||
+      serpData.summary.price?.current ||
+      parseFloat(serpData.summary.price?.toString() || "0") ||
+      0;
+
+    // Extract previous close
+    const previousClose =
+      serpData.summary.price?.previous_close ||
+      serpData.graph?.previous_close ||
+      currentPrice;
+
+    // Calculate change if not provided
+    let changeValue = serpData.summary.market?.price_movement?.value || 0;
+    let changePercent =
+      serpData.summary.market?.price_movement?.percentage || 0;
+
+    if (changeValue === 0 && currentPrice > 0 && previousClose > 0) {
+      changeValue = currentPrice - previousClose;
+      changePercent = (changeValue / previousClose) * 100;
+    }
+
+    // Handle graph data with fallback to sample data
+    const graphData = {
+      timespan: timeRange,
+      previous_close: previousClose,
       graph: [] as Array<{
         timestamp: number;
         price: number;
@@ -75,58 +119,64 @@ export async function GET(request: NextRequest) {
       }>,
     };
 
+    // Try to use real graph data first
     if (
       serpData.graph &&
       serpData.graph.graph &&
       Array.isArray(serpData.graph.graph) &&
       serpData.graph.graph.length > 0
     ) {
-      graphData = {
-        timespan: serpData.graph.timespan || "1D",
-        previous_close:
-          serpData.graph.previous_close ||
-          serpData.summary.price.previous_close,
-        graph: serpData.graph.graph.map((point) => ({
-          timestamp: point.timestamp,
-          price: point.price,
-          date: new Date(point.timestamp * 1000).toLocaleTimeString("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        })),
-      };
+      console.log("Using real graph data from SerpAPI");
+      graphData.graph = serpData.graph.graph.map((point) => ({
+        timestamp: point.timestamp,
+        price: point.price,
+        date: formatDateForTimeRange(point.timestamp, timeRange),
+      }));
     } else {
-      console.warn("No graph data available, returning empty graph");
-      // Create a single point graph with current price if no graph data
-      const currentTime = Math.floor(Date.now() / 1000);
-      graphData.graph = [
-        {
-          timestamp: currentTime,
-          price: serpData.summary.price.current,
-          date: new Date().toLocaleTimeString("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        },
-      ];
+      console.log("No real graph data available, generating sample data");
+      // Always generate sample data when real data is not available
+      graphData.graph = generateSampleData(
+        currentPrice,
+        previousClose,
+        timeRange
+      );
     }
+
+    console.log(`Generated ${graphData.graph.length} data points`);
+
+    // Ensure we have updated summary data with calculated values
+    const updatedSummary = {
+      ...serpData.summary,
+      extracted_price: currentPrice,
+      price: {
+        current: currentPrice,
+        previous_close: previousClose,
+        change: changeValue,
+        change_percent: changePercent,
+      },
+      market: {
+        ...serpData.summary.market,
+        price_movement: {
+          value: changeValue,
+          percentage: changePercent,
+          movement: changeValue >= 0 ? "Up" : "Down",
+        },
+      },
+    };
 
     // Transform the data to match the interface
     const stockData: StockData = {
       title: serpData.title || `${symbol} Stock`,
       stock: serpData.stock || symbol.split(":")[0],
       exchange: serpData.exchange || symbol.split(":")[1] || "UNKNOWN",
-      summary: serpData.summary,
+      summary: updatedSummary,
       graph: graphData,
     };
 
-    // Add these lines right before: return NextResponse.json(stockData);
     console.log(
       "Final stockData being returned:",
       JSON.stringify(stockData, null, 2)
     );
-    console.log("Summary structure:", stockData.summary);
-    console.log("Price structure:", stockData.summary?.price);
 
     return NextResponse.json(stockData);
   } catch (error) {
@@ -136,7 +186,6 @@ export async function GET(request: NextRequest) {
       const status = error.response?.status || 500;
       let message = "Failed to fetch stock data";
 
-      // Handle specific SerpAPI errors
       if (error.response?.data) {
         console.error("SerpAPI error response:", error.response.data);
         message =
@@ -145,7 +194,6 @@ export async function GET(request: NextRequest) {
           `SerpAPI returned ${status} error`;
       }
 
-      // Handle timeout
       if (error.code === "ECONNABORTED") {
         message = "Request timeout - please try again";
       }
