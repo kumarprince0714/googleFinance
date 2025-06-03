@@ -1,3 +1,5 @@
+// src/utilities/generateSampleData.ts
+
 import { formatDateForTimeRange } from "./formatDateForTimeRange";
 
 // Enhanced helper function to generate sample data when API doesn't return graph data

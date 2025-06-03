@@ -115,3 +115,119 @@ export interface TimeRangeOption {
   value: TimeRange;
   label?: string;
 }
+
+// ===== MARKET INDICES TYPES =====
+
+// Individual market index item
+export interface MarketIndex {
+  stock: string; // e.g., ".DJI:INDEXDJX"
+  link: string;
+  serpapi_link: string;
+  name: string; // e.g., "Dow Jones"
+  price: number;
+  currency?: string; // e.g., "USD", "$", "₹"
+  price_movement: {
+    percentage: number;
+    value?: number;
+    movement?: "Up" | "Down";
+  };
+}
+
+// Market regions structure
+export interface MarketsByRegion {
+  us?: MarketIndex[];
+  europe?: MarketIndex[];
+  asia?: MarketIndex[];
+  currencies?: MarketIndex[];
+  crypto?: MarketIndex[];
+  futures?: MarketIndex[];
+}
+
+// Market trends structure (for regional groupings)
+export interface MarketTrend {
+  title: string; // e.g., "Americas", "Europe, Middle East, and Africa", "Asia Pacific"
+  subtitle?: string;
+  link: string;
+  serpapi_link: string;
+  results: MarketIndex[];
+}
+
+// Complete markets API response
+export interface MarketsApiResponse {
+  search_metadata: {
+    id: string;
+    status: string;
+    json_endpoint: string;
+    created_at: string;
+    processed_at: string;
+    google_finance_markets_url: string;
+    raw_html_file: string;
+    total_time_taken: number;
+  };
+  search_parameters: {
+    engine: string;
+    trend?: string;
+    hl?: string;
+    gl?: string;
+  };
+  markets: MarketsByRegion;
+  market_trends?: MarketTrend[];
+  news_results?: Array<{
+    source: string;
+    link: string;
+    date: string;
+    snippet: string;
+    thumbnail?: string;
+    stocks?: Array<{
+      name: string;
+      link: string;
+      serpapi_link: string;
+      stock: string;
+      price_movement: {
+        percentage: number;
+        movement?: "Up" | "Down";
+      };
+    }>;
+  }>;
+  discover_more?: Array<{
+    title: string;
+    items: MarketIndex[];
+  }>;
+
+  error?: string;
+}
+
+// Processed market data for UI consumption
+export interface ProcessedMarketData {
+  us: MarketIndex[];
+  europe: MarketIndex[];
+  asia: MarketIndex[];
+  currencies: MarketIndex[];
+  crypto: MarketIndex[];
+  futures: MarketIndex[];
+}
+
+// Country/Region options for selector
+export interface MarketRegion {
+  key: keyof ProcessedMarketData;
+  label: string;
+  flag?: string; // Optional flag emoji or icon
+}
+
+// Market categories
+export type MarketCategory = "indexes" | "currencies" | "crypto" | "futures";
+
+// Options for market data fetching
+export interface UseMarketsOptions {
+  enabled?: boolean;
+  category?: MarketCategory;
+  region?: string;
+}
+
+// Error type for market data
+export interface MarketsError {
+  message: string;
+  status?: number;
+  region?: string;
+  category?: string;
+}
