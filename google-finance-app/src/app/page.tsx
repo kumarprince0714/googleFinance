@@ -47,7 +47,7 @@ export default function Home() {
 
           {/* Markets List Component */}
           <div className="max-w-6xl mx-auto">
-            <MarketsList onSymbolSelect={handleSymbolChange} />
+            <MarketsList />
           </div>
 
           {/* Stock Chart Component */}

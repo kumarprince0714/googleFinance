@@ -338,7 +338,7 @@ export default function StockChart({ symbol }: StockChartProps) {
       </div>
 
       {/* Debug Information (remove in production) */}
-      {process.env.NODE_ENV === "development" && (
+      {/* {process.env.NODE_ENV === "development" && (
         <div className="mt-4 p-3 bg-gray-100 rounded text-xs">
           <details>
             <summary className="cursor-pointer font-semibold">
@@ -360,7 +360,7 @@ export default function StockChart({ symbol }: StockChartProps) {
             </pre>
           </details>
         </div>
-      )}
+      )} */}
     </div>
   );
 }

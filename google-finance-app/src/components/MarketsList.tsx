@@ -16,11 +16,7 @@ const MARKET_REGIONS: MarketRegion[] = [
   { key: "futures", label: "Futures", flag: "📈" },
 ];
 
-interface MarketsListProps {
-  onSymbolSelect?: (symbol: string) => void;
-}
-
-export default function MarketsList({ onSymbolSelect }: MarketsListProps) {
+export default function MarketsList() {
   // Fix the type issue by being explicit about the type
   const [selectedRegion, setSelectedRegion] =
     useState<keyof ProcessedMarketData>("us");
@@ -34,19 +30,6 @@ export default function MarketsList({ onSymbolSelect }: MarketsListProps) {
     enabled: true,
     region: selectedRegion,
   });
-
-  const handleSymbolClick = (marketIndex: MarketIndex) => {
-    // Extract symbol from stock field (e.g., ".DJI:INDEXDJX" -> "DJI")
-    let symbol = marketIndex.stock;
-
-    // Remove common prefixes and suffixes
-    symbol = symbol.replace(/^\./, ""); // Remove leading dot
-    symbol = symbol.split(":")[0]; // Take part before colon
-
-    if (onSymbolSelect) {
-      onSymbolSelect(symbol);
-    }
-  };
 
   const formatPrice = (price: number, currency?: string): string => {
     const currencySymbol = getCurrencySymbol(currency);
@@ -141,9 +124,7 @@ export default function MarketsList({ onSymbolSelect }: MarketsListProps) {
         <h2 className="text-2xl font-bold text-gray-900 mb-2">
           Market Indices
         </h2>
-        <p className="text-gray-600">
-          Browse market indices by region and click to view detailed charts
-        </p>
+        <p className="text-gray-600">Browse market indices by region</p>
       </div>
 
       {/* Region Selector */}
@@ -172,7 +153,6 @@ export default function MarketsList({ onSymbolSelect }: MarketsListProps) {
           {currentRegionData.map((index: MarketIndex, i: number) => (
             <div
               key={`${index.stock}-${i}`}
-              onClick={() => handleSymbolClick(index)}
               className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group"
             >
               <div className="flex items-start justify-between">
@@ -252,7 +232,6 @@ export default function MarketsList({ onSymbolSelect }: MarketsListProps) {
               Showing {currentRegionData.length} indices for{" "}
               {MARKET_REGIONS.find((r) => r.key === selectedRegion)?.label}
             </span>
-            <span>Click any index to view detailed chart</span>
           </div>
         </div>
       )}
